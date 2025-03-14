@@ -1,0 +1,65 @@
+module preparation
+    implicit none
+
+contains
+
+    ! Define the grid points (line over which SE will be integrated)
+    subroutine DefineGrid(N, left_border, right_border, grid_points, h)
+        implicit none
+
+        integer, intent(in) :: N
+        real(kind=8), intent(in) :: left_border, right_border
+        real(kind=8), intent(inout) :: grid_points(:)
+        real(kind=8), intent(out) :: h
+        real(kind=8) :: next_value
+        integer :: i
+
+        ! Set boundaries:
+        grid_points(1) = left_border
+        grid_points(N) = right_border
+
+        h = (right_border - left_border)/(N-1)
+
+        next_value = left_border + h/2 !align in middle 
+        grid_points(2) = next_value
+        do i = 3, N-1
+            next_value = next_value + h
+            grid_points(i) = next_value
+        end do
+
+    end subroutine DefineGrid
+
+    ! Build 3-point scheme matrix
+    subroutine build_S_matrix(N, h, S_matrix)
+        implicit none
+
+        integer, intent(in) :: N
+        real(kind=8), intent(in) :: h
+        real(kind=8), intent(inout) :: S_matrix(:, :)
+        integer :: i
+
+        ! Initialize first and last row
+        S_matrix(1,2) = 1.
+        S_matrix(N, N - 1) = 1.
+
+        ! Off-diagonal elements
+        do i = 2, N-1
+            S_matrix(i, i-1) = 1.
+            S_matrix(i, i+1) = 1.
+        end do
+
+        ! Diagonal elements
+        do i = 1, N 
+            S_matrix(i,i) = -2.
+        end do
+
+        S_matrix = (-1./((2.*h)**2))*S_matrix
+
+        ! Boundary conditions:
+        S_matrix(1, :) = 0.0
+        S_matrix(1, 1) = 1.0
+        S_matrix(N, :) = 0.0
+        S_matrix(N, N) = 1.0
+    end subroutine build_S_matrix
+
+end module preparation
