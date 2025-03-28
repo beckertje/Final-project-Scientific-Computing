@@ -1,0 +1,32 @@
+! Module that uses a callback procedure to 'fill up' potential vector
+module make_pot
+    implicit none
+
+    contains
+
+        subroutine make_potential(potential_func, left_border, right_border, grid, potential_array)
+          real(kind=8), intent(in) :: grid(:)
+          real(kind=8), intent(inout) :: potential_array(:)
+          real(kind=8), intent(in) :: left_border, right_border
+          integer          :: i, N
+          real(kind=8) :: x0
+
+          interface 
+            real(kind=8) function potential_func(x, x0_func, i_func, N_func)
+                real(kind=8), intent(in) :: x, x0_func
+                integer, intent(in) :: i_func, N_func
+            end function potential_func
+          end interface
+
+          x0 = (left_border + right_border)/2. !middle of domain
+          N = size(grid)
+
+          do i = 1, N
+            potential_array(i) = potential_func(grid(i), x0, i, N)
+          enddo
+    
+        end subroutine make_potential
+
+end module make_pot
+
+
