@@ -1,0 +1,78 @@
+! Module for the shooting algorithm
+module shooting
+    implicit none
+
+contains
+
+    subroutine algorithm(lambda_trial, h, N, m, potential_vector, solutions_left, solutions_right)
+        implicit none
+
+        real(kind=8), intent(in) :: potential_vector(:)
+        real(kind=8), intent(in) :: h, lambda_trial 
+        integer, intent(in) :: N, m
+        integer :: j
+        real(kind=8), intent(inout) :: solutions_left(:), solutions_right(:)
+        
+        ! According to formulas in project description
+        do j = 3, m+1 !in this loop and the one below, we iterate 1 further than m for calculating the derivative
+            solutions_left(j) = -solutions_left(j-2) + 2*h**2*(potential_vector(j) - lambda_trial + 1/(h**2))*solutions_left(j-1)
+        end do
+
+        do j = (N-2), (m-1), -1 !iterate backwards
+            solutions_right(j) = -solutions_right(j+2) + 2*h**2*(potential_vector(j) - lambda_trial + 1/(h**2))*solutions_right(j+1)
+        end do
+
+    end subroutine
+
+    ! Normalize 
+    subroutine normalize(vector)
+        implicit none
+
+        real(kind=8), intent(inout) :: vector(:)
+        integer :: i, N
+        real(kind=8) :: length
+        
+        N = size(vector)
+        length = 0.
+        do i = 1, N
+            length = length + vector(i)**2
+        end do
+
+        length = sqrt(length)
+        vector = vector/length
+
+    end subroutine normalize
+
+    ! Calculate derivative
+    real(kind=8) function first_derivative(solutions_vector, h, m) result(derivative)
+
+        real(kind=8), intent(in) :: solutions_vector(:)
+        real(kind=8), intent(in) :: h
+        integer, intent(in) :: m
+        derivative = 0.
+        derivative = (solutions_vector(m+1) - solutions_vector(m-1))/(2*h)
+
+    end function first_derivative
+
+    ! Calculate delta lambda
+    real(kind=8) function delta_lambda(solution_left, solution_right, derivative_left, derivative_right, &
+    integral_left, integral_right) result(d_lambda)
+        real(kind=8), intent(in) :: solution_left, solution_right 
+        real(kind=8), intent(in) :: derivative_left, derivative_right, integral_left, integral_right
+        real(kind=8) :: first_term, second_term, third_term
+
+        d_lambda = 0.
+        first_term = 0.
+        second_term = 0.
+        third_term = 0.
+
+        first_term = 0.5*(derivative_right/solution_right - derivative_left/solution_left)
+        second_term = (1./solution_left**2)*integral_left
+        third_term = (1./solution_right**2)*integral_right
+
+        d_lambda = first_term*(second_term + third_term)**(-1.)
+
+    end function
+
+
+end module shooting
