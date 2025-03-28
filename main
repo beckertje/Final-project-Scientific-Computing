@@ -1,0 +1,167 @@
+program  project
+  use preparation
+  use Diagonalization
+  use shooting
+  use integration_module
+  use potential_functions
+  use make_pot
+  use save_results
+  implicit none 
+
+  ! Arrays for 3-point scheme
+  real(kind=8), allocatable :: grid(:), S_matrix(:, :), potential_matrix(:, :), potential_vector(:)
+  real(kind=8), allocatable :: hamiltonian(:, :), eigenvalues(:)
+  ! Arrays for shooting algorithm
+  real(kind=8), allocatable :: solutions_left(:), solutions_right(:)
+  ! Arrays with final values that will be exported
+  real(kind=8), allocatable :: final(:), all_final(:, :), final_eigenvalues(:)
+  ! Variables for shooting algorithm
+  real(kind=8) :: h, lambda_i, lambda_old, epsilon, conversion_factor, distance_nm
+  real(kind=8) :: derivative_left, derivative_right, integral_left, integral_right, d_lambda
+  real(kind=8) :: y1, y2, y_N, y_N_min_1
+  real(kind=8) :: left_border, right_border
+  ! Parameters for conversion
+  real(kind=8), parameter :: q_e=1.602E-19, hbar=1.05457E-34, m_e=9.1093837E-31
+  ! Integers for number of grid points, matching point and looping index
+  integer :: N, m, i
+
+  !
+  ! NOTE: the algorithm turned out to be very sensitive to NaN values.
+  !       This is because we converge to a very low d_lambda and apart from that,
+  !       the calculation of the 'first term' in delta lambda involves a fraction
+  !       that's often close to "0/0". So close even that (I think) a floating point error
+  !       sometimes makes the algorithm crash. If this happens, or if weird results
+  !       are plotted, just run the code again. Also make sure to choose enough 
+  !       grid points. For testing, N = 251, left_border = -1 and right_border = 1
+  !       were chosen.
+  !
+  !       Results are written to a txt file and plotted with the python code provided.
+  !       Example plots are included in the zip file
+  !
+
+  ! User input
+  print*, "What is the number of grid points? (Algorithm was tested with N=251)"
+  read(*,*) N
+  print*, "What is the left border? (Algorithm was tested with a value of -1)"
+  read(*,*) left_border
+  print*, "What is the right border? (Algorithm was tested with a value of 1)"
+  read(*,*) right_border 
+
+  ! Conversions
+  distance_nm = (abs(left_border) + abs(right_border))*1.E-9
+  conversion_factor = (hbar**2)/(2*m_e*q_e*distance_nm**2)
+  
+  ! Allocate and initialize
+  allocate(grid(N), S_matrix(N, N), potential_matrix(N, N), potential_vector(N))
+  potential_vector = 0.
+  potential_matrix = 0.
+  grid = 0.
+  S_matrix = 0.
+
+  ! Preparation of 3-point scheme: build grid and build S and V matrices 
+  call DefineGrid(N, left_border, right_border, grid, h)
+  call build_S_matrix(N, h, S_matrix)
+
+  ! Choose potential type (Gaussian_func for infinite Gaussian or infinite_func for infinite well):
+  call make_potential(infinite_func, left_border, right_border, grid, potential_vector)
+  !call make_potential(Gaussian_func, left_border, right_border, grid, potential_vector)
+
+  ! Make matrix of potential array
+  do i = 1, N
+    potential_matrix(i,i) = potential_vector(i)
+  end do
+
+
+  ! Now the hamiltonian is S+V and we need to solve this to obtain first values for lambda
+  allocate(hamiltonian(N, N), eigenvalues(N))
+  hamiltonian = 0.
+  eigenvalues = 0.
+  hamiltonian = S_matrix + potential_matrix
+  call diagonalize(matrix=hamiltonian, eigenvalues=eigenvalues)
+
+  ! Boundary conditions (wave functions should be 0 at border and non-negative next to the border)
+  y1 = 0. 
+  y2 = 1.E-5 
+  y_N = 0. 
+  y_N_min_1 = 1.E-5 
+
+  ! Allocate and initialize (some are initialized again every next iteration in the loop below)
+  allocate(solutions_left(N), solutions_right(N)) !we won't use the whole array but this is to prevent out of bounds
+  allocate(final(N), all_final(N, N), final_eigenvalues(N))
+  all_final = 0.
+
+  ! Convergence criterion
+  epsilon = 1.E-6
+
+  ! Shooting algorithm per grid point/eigenvalue
+  do i = 1, N
+    ! Initialize 
+    final = 0.
+    integral_left = 0.
+    integral_right = 0.
+    derivative_left = 0.
+    derivative_right = 0.
+    d_lambda = 0.
+
+    ! Initialize solution arrays with boundary conditions
+    solutions_left = 0.
+    solutions_right = 0.
+    solutions_left(1) = y1
+    solutions_left(2) = y2
+    solutions_right(N) = y_N
+    ! Different matching point and starting direction for odd and even solutions
+    if (mod(i,2) == 1) then
+      solutions_right(N-1) = y_N_min_1
+      m = nint((N+1.)/2.) !middle of grid
+    else 
+      solutions_right(N-1) = -y_N_min_1
+      m = nint((N+1.)/2.) +1 !wave function is 0 in the middle
+    end if
+
+    ! Extract initial guess eigenvalue
+    lambda_i = eigenvalues(i)
+
+    lambda_old = 9999. !to initialize loop
+    ! Keep looping until convergence criterion is reached
+    do while (abs(lambda_i - lambda_old) > epsilon)
+      lambda_old = lambda_i
+      ! Generate solution
+      call algorithm(lambda_i, h, N, m, potential_vector, solutions_left, solutions_right)
+      ! Normalize
+      call normalize(solutions_left)
+      call normalize(solutions_right)
+      ! Calculate derivatives and integrals
+      derivative_left = first_derivative(solutions_left, h, m)
+      derivative_right = first_derivative(solutions_right, h, m)
+      call Newton_cotes(solutions_left(1:m)**2, h, 1, m, integral_left)
+      call Newton_cotes(solutions_right(m:N)**2, h, m, N, integral_right)
+
+      ! Calculate delta lambda
+      d_lambda = delta_lambda(solutions_left(m), solutions_right(m), derivative_left, derivative_right, &
+      integral_left, integral_right)
+      ! Update
+      lambda_i = lambda_i - d_lambda
+    end do
+
+    ! Concatenate final solution
+    final = (/ solutions_left(1:m), solutions_right(m+1:N)/)
+    ! Normalize one last time
+    call normalize(final)
+    ! Store solutions
+    all_final(:, i) = final
+    final_eigenvalues(i) = lambda_i*conversion_factor
+
+  end do
+
+  ! Write soluitions to output files
+  call write_solutions(all_final, N)
+  call write_eigenvalues(final_eigenvalues)
+  call write_borders(left_border, right_border)
+  print*
+  print*, "Results have been written to solutions.txt, eigenvals.txt and borders.txt"
+
+  ! Deallocate 
+  deallocate(grid, S_matrix, potential_matrix, potential_vector, hamiltonian, eigenvalues)
+  deallocate(solutions_left, solutions_right, final, all_final, final_eigenvalues)
+
+end program 
