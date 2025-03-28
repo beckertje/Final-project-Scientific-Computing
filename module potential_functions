@@ -1,0 +1,38 @@
+! Module for the potential functions
+module potential_functions
+    implicit none
+
+contains
+
+    ! Infinite Gaussian 
+    real(kind=8) function Gaussian_func(x, x0, i, N)
+        real(kind=8), intent(in) :: x, x0
+        integer, intent(in) :: i, N
+        real(kind=8), parameter :: alpha=3., V0=-100. 
+
+        if (i==1 .or. i==N) then
+            Gaussian_func = 1.E30 !boundary condition
+        else
+            Gaussian_func = V0*exp((-alpha*(x - x0)**2))
+        end if  
+
+    end function
+
+    ! Infinite well
+    real(kind=8) function infinite_func(x, x0, i, N)
+        real(kind=8), intent(in) :: x, x0
+        integer, intent(in) :: i, N
+        real(kind=8) :: suppress_warning
+
+        ! Not very 'clean', I must say, but this is to suprress warning about the argument not being used
+        suppress_warning = x
+        suppress_warning = x0
+        suppress_warning = i
+        suppress_warning = N
+
+        infinite_func = 0.0 !just 0 everywhere
+
+    end function infinite_func
+
+end module
+
