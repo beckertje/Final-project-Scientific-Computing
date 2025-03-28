@@ -1,0 +1,52 @@
+module save_results
+    implicit none
+
+contains
+
+    ! Write wave function to txt file
+    subroutine write_solutions(solutions, N)
+        implicit none
+
+        real(kind=8), intent(in) :: solutions(:, :)
+        integer, intent(in) :: N
+        integer :: i
+
+        open (unit=10, file="solutions.txt", action="write")
+
+        do i = 1, N
+            write(10,*) solutions(:, i)
+        end do
+
+        close (10)
+
+    end subroutine write_solutions
+
+    ! Write eigenvalues to txt file
+    subroutine write_eigenvalues(eigenvalues)
+        implicit none
+
+        real(kind=8), intent(in) :: eigenvalues(:)
+
+        open (unit=11, file="eigenvals.txt", action="write")
+
+        write(11,*) eigenvalues(:)
+
+        close (11)
+
+    end subroutine write_eigenvalues
+
+    ! Write border values to txt file
+    subroutine write_borders(left_border, right_border)
+        implicit none
+
+        real(kind=8), intent(in) :: left_border, right_border
+
+        open (unit=12, file="borders.txt", action="write")
+
+        write(12,*) left_border, right_border
+
+        close (12)
+    
+    end subroutine write_borders
+
+end module save_results
